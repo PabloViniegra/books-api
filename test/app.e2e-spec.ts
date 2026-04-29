@@ -1,10 +1,17 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { MongooseModule } from '@nestjs/mongoose';
+import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import request from 'supertest';
-import { AppModule } from './../src/app.module';
+import { AuthModule } from './../src/auth/auth.module';
 import { BOOKS_SEED_DATA } from './../src/books/books.seed';
+import { BooksModule } from './../src/books/books.module';
+import { RedisCacheModule } from './../src/cache/redis-cache.module';
+import { AppConfig, validateAppConfig } from './../src/config/app-config';
 import { setupApp } from './../src/setup-app';
 
 jest.setTimeout(120000);
@@ -34,6 +41,43 @@ type OpenApiDocumentResponse = {
   paths: Record<string, unknown>;
 };
 
+const createAppTestingModule = async (): Promise<TestingModule> =>
+  Test.createTestingModule({
+    imports: [
+      ConfigModule.forRoot({
+        isGlobal: true,
+        validate: validateAppConfig,
+        ignoreEnvFile: true,
+      }),
+      ThrottlerModule.forRootAsync({
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService<AppConfig, true>) => [
+          {
+            ttl: configService.getOrThrow('RATE_LIMIT_TTL', { infer: true }),
+            limit: configService.getOrThrow('RATE_LIMIT_LIMIT', {
+              infer: true,
+            }),
+          },
+        ],
+      }),
+      MongooseModule.forRootAsync({
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService<AppConfig, true>) => ({
+          uri: configService.getOrThrow('MONGODB_URI', { infer: true }),
+        }),
+      }),
+      RedisCacheModule,
+      AuthModule,
+      BooksModule,
+    ],
+    providers: [
+      {
+        provide: APP_GUARD,
+        useClass: ThrottlerGuard,
+      },
+    ],
+  }).compile();
+
 describe('BooksController (e2e)', () => {
   let app: INestApplication;
   let mongoServer: MongoMemoryServer;
@@ -42,18 +86,20 @@ describe('BooksController (e2e)', () => {
 
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
-    process.env.MONGODB_URI = mongoServer.getUri('books-api-test');
-    delete process.env.REDIS_URL;
-    process.env.CACHE_TTL_SECONDS = '60';
-    process.env.GOOGLE_CLIENT_ID = 'test-client-id.apps.googleusercontent.com';
-    process.env.JWT_SECRET = 'test-jwt-secret-for-e2e-tests';
-    process.env.JWT_EXPIRES_IN = '1h';
-    process.env.RATE_LIMIT_TTL = '60000';
-    process.env.RATE_LIMIT_LIMIT = '100';
+    process.env['MONGODB_URI'] = mongoServer.getUri('books-api-test');
+    delete process.env['REDIS_URL'];
+    process.env['CACHE_TTL_SECONDS'] = '60';
+    process.env['REDIS_RETRY_DELAY_MS'] = '0';
+    process.env['GOOGLE_CLIENT_ID'] =
+      'test-client-id.apps.googleusercontent.com';
+    process.env['JWT_SECRET'] = 'test-jwt-secret-for-e2e-tests';
+    process.env['JWT_EXPIRES_IN'] = '1h';
+    process.env['RATE_LIMIT_TTL'] = '60000';
+    process.env['RATE_LIMIT_LIMIT'] = '100';
+    process.env['ENABLE_BOOKS_SEED'] = 'true';
+    process.env['ENABLE_GOOGLE_AUTH_TEST_PAGE'] = 'true';
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleFixture = await createAppTestingModule();
 
     accessToken = await moduleFixture.get(JwtService).signAsync({
       sub: 'google-user-id',
@@ -223,17 +269,16 @@ describe('BooksController (e2e)', () => {
 
   it('rate limits requests globally', async () => {
     const rateLimitedMongoServer = await MongoMemoryServer.create();
-    process.env.MONGODB_URI = rateLimitedMongoServer.getUri(
+    process.env['MONGODB_URI'] = rateLimitedMongoServer.getUri(
       'books-api-rate-limit-test',
     );
-    delete process.env.REDIS_URL;
-    process.env.CACHE_TTL_SECONDS = '60';
-    process.env.RATE_LIMIT_TTL = '60000';
-    process.env.RATE_LIMIT_LIMIT = '1';
+    delete process.env['REDIS_URL'];
+    process.env['CACHE_TTL_SECONDS'] = '60';
+    process.env['REDIS_RETRY_DELAY_MS'] = '0';
+    process.env['RATE_LIMIT_TTL'] = '60000';
+    process.env['RATE_LIMIT_LIMIT'] = '1';
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleFixture = await createAppTestingModule();
     const rateLimitedApp = moduleFixture.createNestApplication();
     setupApp(rateLimitedApp);
 
@@ -247,8 +292,8 @@ describe('BooksController (e2e)', () => {
     } finally {
       await rateLimitedApp.close();
       await rateLimitedMongoServer.stop();
-      process.env.MONGODB_URI = mongoServer.getUri('books-api-test');
-      process.env.RATE_LIMIT_LIMIT = '100';
+      process.env['MONGODB_URI'] = mongoServer.getUri('books-api-test');
+      process.env['RATE_LIMIT_LIMIT'] = '100';
     }
   });
 

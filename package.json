@@ -1,8 +1,8 @@
 {
   "name": "books-api",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "API REST para la gestion de libros construida con NestJS, MongoDB, Redis y Mongoose, con autenticacion mediante Google ID Token y JWT propio de la API.",
+  "author": "Pablo Viniegra Picazo",
   "private": true,
   "license": "MIT",
   "scripts": {

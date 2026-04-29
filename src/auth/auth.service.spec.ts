@@ -17,12 +17,12 @@ describe('AuthService', () => {
   };
 
   const configService = {
-    get: jest.fn(),
+    getOrThrow: jest.fn(),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    configService.get.mockReturnValue('1h');
+    configService.getOrThrow.mockReturnValue('1h');
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

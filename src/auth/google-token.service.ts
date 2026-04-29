@@ -1,19 +1,22 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
+import { AppConfig } from '../config/app-config';
 import { AuthUser } from './types/auth-user';
 
 @Injectable()
 export class GoogleTokenService {
   private readonly client = new OAuth2Client();
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService<AppConfig, true>) {}
 
   async verifyIdToken(idToken: string): Promise<AuthUser> {
     try {
       const ticket = await this.client.verifyIdToken({
         idToken,
-        audience: this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
+        audience: this.configService.getOrThrow('GOOGLE_CLIENT_ID', {
+          infer: true,
+        }),
       });
       const payload = ticket.getPayload();
 
@@ -35,8 +38,8 @@ export class GoogleTokenService {
     return {
       id: payload.sub,
       email: payload.email,
-      name: payload.name,
-      picture: payload.picture,
+      ...(payload.name !== undefined ? { name: payload.name } : {}),
+      ...(payload.picture !== undefined ? { picture: payload.picture } : {}),
     };
   }
 }

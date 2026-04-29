@@ -6,25 +6,27 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { BooksModule } from './books/books.module';
 import { RedisCacheModule } from './cache/redis-cache.module';
+import { AppConfig, validateAppConfig } from './config/app-config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validateAppConfig,
     }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => [
+      useFactory: (configService: ConfigService<AppConfig, true>) => [
         {
-          ttl: configService.get<number>('RATE_LIMIT_TTL', 60000),
-          limit: configService.get<number>('RATE_LIMIT_LIMIT', 100),
+          ttl: configService.getOrThrow('RATE_LIMIT_TTL', { infer: true }),
+          limit: configService.getOrThrow('RATE_LIMIT_LIMIT', { infer: true }),
         },
       ],
     }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        uri: configService.getOrThrow<string>('MONGODB_URI'),
+      useFactory: (configService: ConfigService<AppConfig, true>) => ({
+        uri: configService.getOrThrow('MONGODB_URI', { infer: true }),
       }),
     }),
     RedisCacheModule,

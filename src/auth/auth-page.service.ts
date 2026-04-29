@@ -1,26 +1,23 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AppConfig } from '../config/app-config';
 
 @Injectable()
 export class AuthPageService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService<AppConfig, true>) {}
 
   getGoogleTestPage(): string {
-    if (this.configService.get<string>('NODE_ENV') === 'production') {
+    if (
+      !this.configService.getOrThrow('ENABLE_GOOGLE_AUTH_TEST_PAGE', {
+        infer: true,
+      })
+    ) {
       throw new NotFoundException();
     }
 
-    const googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
-
-    if (!googleClientId) {
-      throw new InternalServerErrorException(
-        'GOOGLE_CLIENT_ID is not configured',
-      );
-    }
+    const googleClientId = this.configService.getOrThrow('GOOGLE_CLIENT_ID', {
+      infer: true,
+    });
 
     return `<!doctype html>
 <html lang="en">

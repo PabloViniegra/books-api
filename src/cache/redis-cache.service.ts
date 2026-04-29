@@ -1,19 +1,27 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, type RedisClientType } from 'redis';
+import { AppConfig } from '../config/app-config';
 
 @Injectable()
 export class RedisCacheService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisCacheService.name);
   private readonly ttlSeconds: number;
+  private readonly retryDelayMs: number;
   private readonly client: RedisClientType | null;
   private connectionPromise: Promise<RedisClientType | null> | null = null;
+  private nextReconnectAt = 0;
   private cacheDisabled = false;
 
-  constructor(private readonly configService: ConfigService) {
-    this.ttlSeconds = this.configService.get<number>('CACHE_TTL_SECONDS', 60);
+  constructor(private readonly configService: ConfigService<AppConfig, true>) {
+    this.ttlSeconds = this.configService.getOrThrow('CACHE_TTL_SECONDS', {
+      infer: true,
+    });
+    this.retryDelayMs = this.configService.getOrThrow('REDIS_RETRY_DELAY_MS', {
+      infer: true,
+    });
 
-    const redisUrl = this.configService.get<string>('REDIS_URL');
+    const redisUrl = this.configService.get('REDIS_URL', { infer: true });
 
     if (!redisUrl) {
       this.client = null;
@@ -138,16 +146,26 @@ export class RedisCacheService implements OnModuleDestroy {
       return this.client;
     }
 
+    if (Date.now() < this.nextReconnectAt) {
+      return null;
+    }
+
     if (!this.connectionPromise) {
       this.connectionPromise = this.client
         .connect()
-        .then(() => this.client)
+        .then(() => {
+          this.nextReconnectAt = 0;
+          return this.client;
+        })
         .catch((error: Error) => {
-          this.cacheDisabled = true;
+          this.nextReconnectAt = Date.now() + this.retryDelayMs;
           this.logger.warn(
-            `Unable to connect to Redis. Cache will be disabled: ${error.message}`,
+            `Unable to connect to Redis. Retrying in ${this.retryDelayMs}ms: ${error.message}`,
           );
           return null;
+        })
+        .finally(() => {
+          this.connectionPromise = null;
         });
     }
 

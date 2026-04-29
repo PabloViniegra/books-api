@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { AppConfig } from '../config/app-config';
 import { BOOKS_SEED_DATA } from './books.seed';
 import { Book } from './schemas/book.schema';
 
@@ -10,9 +12,14 @@ export class BooksSeedService implements OnApplicationBootstrap {
 
   constructor(
     @InjectModel(Book.name) private readonly bookModel: Model<Book>,
+    private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    if (!this.configService.getOrThrow('ENABLE_BOOKS_SEED', { infer: true })) {
+      return;
+    }
+
     const booksCount = await this.bookModel.countDocuments().exec();
 
     if (booksCount > 0) {

@@ -99,13 +99,16 @@ Parte de la configuracion ya esta documentada en `.env.example`.
 | --- | --- | --- |
 | `PORT` | no | puerto HTTP de la API. Default: `3000` |
 | `MONGODB_URI` | si | cadena de conexion de MongoDB |
-| `REDIS_URL` | si | cadena de conexion de Redis usada para la cache de lectura |
+| `REDIS_URL` | no | cadena de conexion de Redis usada para la cache de lectura. Si falta, la API sigue funcionando sin cache |
 | `CACHE_TTL_SECONDS` | no | TTL en segundos para `GET /books` y `GET /books/:id`. Default: `60` |
+| `REDIS_RETRY_DELAY_MS` | no | espera entre reintentos de conexion a Redis tras un fallo. Default: `5000` |
 | `GOOGLE_CLIENT_ID` | si | client ID de Google OAuth usado para verificar el `idToken` |
 | `JWT_SECRET` | si | secreto para firmar y verificar el token de la API |
 | `JWT_EXPIRES_IN` | no | expiracion del JWT. Default: `1h` |
 | `RATE_LIMIT_TTL` | no | ventana del rate limit en milisegundos. Default: `60000` |
 | `RATE_LIMIT_LIMIT` | no | numero maximo de peticiones por ventana. Default: `100` |
+| `ENABLE_BOOKS_SEED` | no | habilita la carga automatica del catalogo demo al arrancar. Default: `true` en `development` y `test`, `false` en `production` |
+| `ENABLE_GOOGLE_AUTH_TEST_PAGE` | no | habilita `GET /auth/google/test`. Default: `true` solo en `development` |
 
 Ejemplo:
 

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { AppConfig } from '../config/app-config';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { GoogleTokenService } from './google-token.service';
 import { ApiJwtPayload, AuthUser } from './types/auth-user';
@@ -10,7 +11,7 @@ export class AuthService {
   constructor(
     private readonly googleTokenService: GoogleTokenService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
   async loginWithGoogle(idToken: string): Promise<AuthResponseDto> {
@@ -22,7 +23,9 @@ export class AuthService {
     return {
       accessToken,
       tokenType: 'Bearer',
-      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
+      expiresIn: this.configService.getOrThrow('JWT_EXPIRES_IN', {
+        infer: true,
+      }),
       user,
     };
   }
@@ -31,8 +34,8 @@ export class AuthService {
     return {
       sub: user.id,
       email: user.email,
-      name: user.name,
-      picture: user.picture,
+      ...(user.name !== undefined ? { name: user.name } : {}),
+      ...(user.picture !== undefined ? { picture: user.picture } : {}),
     };
   }
 }
